@@ -223,7 +223,7 @@ for lbl, color in LABEL_COLORS.items():
     legend_y -= 0.045
 
 plt.tight_layout()
-plt.savefig("/home/claude/nlp_projects/Q3_named_entity_recognition/results.png",
+plt.savefig("/home/prayash/Music/nlp_projects/Q3_named_entity_recognition/results.png",
             dpi=140, bbox_inches='tight')
 print("\nChart saved → results.png")
 
@@ -288,7 +288,7 @@ html = f"""<!DOCTYPE html>
 </body>
 </html>"""
 
-with open("/home/claude/nlp_projects/Q3_named_entity_recognition/annotated_article.html","w") as f:
+with open("annotated_article.html","w") as f:
     f.write(html)
 print("HTML saved → annotated_article.html")
 
