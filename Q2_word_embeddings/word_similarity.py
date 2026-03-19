@@ -155,7 +155,7 @@ ax2.set_xlabel(f"PC1 ({pca.explained_variance_ratio_[0]:.1%})")
 ax2.set_ylabel(f"PC2 ({pca.explained_variance_ratio_[1]:.1%})")
 ax2.grid(alpha=0.3)
 
-plt.savefig("/home/claude/nlp_projects/Q2_word_embeddings/results.png",
+plt.savefig("/home/prayash/Music/nlp_projects/Q2_word_embeddings/results.png",
             dpi=140, bbox_inches='tight')
 print("\nChart saved → results.png")
 
