@@ -1,35 +1,109 @@
-# NLP Project
+# NLP Assignment Projects
 
-## Overview
-This NLP Project involves several natural language processing techniques and methods to analyze, process, and generate human language data efficiently.
+This repository is now aligned with your assignment topics.
 
-## Components
-- **Data Collection**: Scripts for gathering datasets from various sources including APIs and web scraping.
-- **Data Preprocessing**: Techniques to clean and prepare data for analysis, such as tokenization, stemming, and normalization.
-- **Modeling**: Implementation of various machine learning models for classification, regression, or clustering of textual data.
-- **Evaluation**: Metrics and methods employed to evaluate model performance, such as accuracy, F1 score, and confusion matrix.
-- **Visualization**: Tools used for visualizing data and model results to facilitate understanding and insights.
+## Topic Mapping
 
-## Functionality
-- **Text analysis**: Ability to analyze text data for insights and understanding patterns.
-- **Text generation**: Generating human-like text based on input data.
-- **Classification**: Classifying text into predefined categories.
+1. Q1 Sentiment Analysis -> Topic 1 / Topic 3
+   - Movie/Product Review Sentiment Analysis
+2. Q2 Word Embeddings (converted) -> Topic 7
+   - Emotion Detection from Text
+3. Q3 NER (converted) -> Topic 13
+   - Customer Feedback Analysis
+4. Q4 Chatbot (updated) -> Topic 15
+   - Chatbot Emotion Response System
 
-## Methodology
-1. **Data Acquisition**: Gathering relevant data for the NLP tasks.
-2. **Data Preparation**: Cleaning and structuring the data to make it suitable for model training.
-3. **Model Training and Tuning**: Using various algorithms and adjusting hyperparameters to find the best model.
-4. **Testing**: Evaluating the performance of the model with unseen data.
-5. **Deployment**: Making the model available for practical use.
+## Project Structure
 
-## Installation
-Add installation instructions, including prerequisites and dependencies required to run the project.
+- Q1_sentiment_analysis/sentiment_analysis.py
+- Q2_word_embeddings/word_similarity.py
+- Q3_named_entity_recognition/ner.py
+- Q3_named_entity_recognition/annotated_article.html
+- Q4_chatbot/chatbot.py
 
-## Usage
-Provide examples of how to use the various components of the project.
+## Setup
 
-## Contributing
-Guidelines for contributing to the project.
+### 1) Create and activate a virtual environment (recommended)
 
-## License
-Specify the project license.
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+### 2) Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+## How to Run Each Project
+
+### Q1 - Sentiment Analysis (Topic 1 / 3)
+
+```bash
+cd Q1_sentiment_analysis
+python sentiment_analysis.py
+```
+
+Output:
+- Console metrics (accuracy, classification report)
+- Plot file: Q1_sentiment_analysis/results.png
+
+### Q2 - Emotion Detection from Text (Topic 7)
+
+```bash
+cd Q2_word_embeddings
+python word_similarity.py
+```
+
+Output:
+- Console metrics and sample predictions
+- Plot file: Q2_word_embeddings/results.png
+
+### Q3 - Customer Feedback Analysis (Topic 13)
+
+```bash
+cd Q3_named_entity_recognition
+python ner.py
+```
+
+Output:
+- Console extraction summary (products, issues, sentiment)
+- Plot file: Q3_named_entity_recognition/results.png
+- HTML report: Q3_named_entity_recognition/annotated_article.html
+
+### Q4 - Chatbot Emotion Response System (Topic 15)
+
+Demo mode:
+
+```bash
+cd Q4_chatbot
+python chatbot.py
+```
+
+Interactive mode:
+
+```bash
+cd Q4_chatbot
+python chatbot.py --interactive
+```
+
+Output:
+- Emotion-aware chatbot responses
+- Predicted emotion + confidence per user message
+
+## Quick Validation Run
+
+From repository root:
+
+```bash
+python Q1_sentiment_analysis/sentiment_analysis.py
+python Q2_word_embeddings/word_similarity.py
+python Q3_named_entity_recognition/ner.py
+python Q4_chatbot/chatbot.py
+```
+
+## Notes
+
+- All scripts are self-contained and do not require internet access.
+- Output files are saved in their respective project folders.

@@ -11,6 +11,7 @@ Pipeline:
 """
 
 import re
+import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -220,9 +221,9 @@ for b in bars2:
     ax4.text(b.get_x()+b.get_width()/2, b.get_height()+0.02,
              f"{b.get_height():.1%}", ha='center', fontsize=9, fontweight='bold')
 
-plt.savefig("/home/prayash/Music/nlp_projects/Q1_sentiment_analysis/results.png",
-            dpi=140, bbox_inches='tight')
-print("\nChart saved → results.png")
+output_path = os.path.join(os.path.dirname(__file__), "results.png")
+plt.savefig(output_path, dpi=140, bbox_inches='tight')
+print(f"\nChart saved -> {output_path}")
 
 # ─────────────────────────────────────────────
 # 7. EXPLAIN RESULTS

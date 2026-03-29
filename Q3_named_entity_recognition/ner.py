@@ -1,313 +1,239 @@
 """
-Q3 – Named Entity Recognition (NER)
-=====================================
-Tasks:
-  1. Perform NER on a news article (no external deps required)
-  2. Identify: Person, Organization, Location, Date, Misc
-  3. Visualise: entity frequency bar chart + annotated text HTML
-     (saved as PNG for console run)
+Q3 - Customer Feedback Analysis (Topic 13)
+==========================================
+This project repurposes NER into practical customer-feedback analysis.
 
-Approach: Gazetteer + Rule-based NER
-  • Three curated entity lists (persons, orgs, locations)
-  • Regex patterns for dates, times, money, percentages
-  • Contextual window clue words ("said", "CEO", "Inc", etc.)
+What it does:
+1. Runs lightweight entity extraction on customer feedback text
+2. Extracts product names, issue types, and sentiment polarity
+3. Builds aggregate analytics (top products, top issue categories)
+4. Saves charts and an annotated HTML report
 """
 
+import os
 import re
-import random
-import textwrap
-import numpy as np
+from collections import Counter
+
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-from collections import defaultdict, Counter
 
-# ─────────────────────────────────────────────
-# 1. NEWS ARTICLE
-# ─────────────────────────────────────────────
-ARTICLE = """
-LONDON — Google CEO Sundar Pichai announced on Tuesday that the company
-will invest $1 billion in artificial intelligence research across Europe,
-with major hubs planned in Berlin, Paris, and Warsaw.
 
-Speaking at a press conference in London, Pichai said the initiative would
-create more than 10,000 jobs by 2026 and would work closely with universities
-like Oxford University, the Technical University of Munich, and the
-University of Warsaw.
+FEEDBACKS = [
+    "The camera quality on Pixel 8 is excellent, but battery drains too fast.",
+    "My iPhone 14 gets hot during gaming and the screen freezes sometimes.",
+    "Galaxy Buds sound great, but the left earbud disconnects frequently.",
+    "Dell XPS laptop performance is smooth, however fan noise is very loud.",
+    "The Sony TV picture is amazing and setup was easy.",
+    "MacBook Air keyboard feels premium, but speaker crackling issue persists.",
+    "OnePlus charger stopped working after two weeks.",
+    "The washing machine motor makes a strange noise and vibration.",
+    "This refrigerator cooling is perfect and energy usage is low.",
+    "My smartwatch strap broke and heart rate sensor is inaccurate.",
+    "Customer support replaced my router quickly, very satisfied.",
+    "Headphone mic quality is poor and calls sound muffled.",
+    "The tablet display is bright and battery backup is decent.",
+    "Printer setup was confusing and wifi connection keeps dropping.",
+    "Air purifier works well, but filter is expensive.",
+]
 
-Microsoft President Brad Smith welcomed the move, stating that competition
-drives innovation. Smith noted that Microsoft itself had recently opened a
-new AI research centre in Amsterdam, adding to its existing facilities in
-Seattle and New York.
-
-Apple CFO Luca Maestri and Meta CEO Mark Zuckerberg were also present at the
-European Tech Summit held at the ExCeL London venue. The summit, organised
-by the European Commission, drew representatives from over 40 countries
-including India, Japan, and South Korea.
-
-In a separate development, Elon Musk's company SpaceX signed a data-sharing
-agreement with NASA on Monday, aiming to accelerate missions to Mars.
-Scientists at the European Space Agency (ESA) based in Darmstadt expressed
-enthusiasm about the collaboration.
-
-The United Nations Secretary-General António Guterres praised the
-tech sector's commitment to responsible AI, speaking via video link from
-New York. The World Health Organization (WHO), headquartered in Geneva,
-also released a statement welcoming investment in medical AI applications.
-"""
-
-# ─────────────────────────────────────────────
-# 2. GAZETTEERS
-# ─────────────────────────────────────────────
-PERSONS = {
-    "Sundar Pichai","Brad Smith","Luca Maestri","Mark Zuckerberg",
-    "Elon Musk","António Guterres","Pichai","Smith","Musk","Zuckerberg",
+PRODUCTS = {
+    "pixel 8": "Phone",
+    "iphone 14": "Phone",
+    "galaxy buds": "Audio",
+    "dell xps": "Laptop",
+    "sony tv": "TV",
+    "macbook air": "Laptop",
+    "oneplus charger": "Accessory",
+    "washing machine": "Appliance",
+    "refrigerator": "Appliance",
+    "smartwatch": "Wearable",
+    "router": "Network",
+    "headphone": "Audio",
+    "tablet": "Tablet",
+    "printer": "Printer",
+    "air purifier": "Appliance",
 }
 
-ORGANIZATIONS = {
-    "Google","Microsoft","Apple","Meta","SpaceX","NASA","ESA",
-    "European Space Agency","European Commission","United Nations","WHO",
-    "World Health Organization",
-    "Oxford University","University of Warsaw",
-    "Technical University of Munich",
+ISSUE_PATTERNS = {
+    "battery": ["battery", "drains", "backup"],
+    "heating": ["hot", "heating"],
+    "connectivity": ["disconnects", "wifi", "connection", "dropping"],
+    "audio": ["speaker", "mic", "muffled", "sound"],
+    "hardware": ["broke", "stopped working", "motor", "vibration"],
+    "performance": ["freezes", "lag", "slow", "noise"],
+    "price": ["expensive"],
+    "setup": ["setup", "confusing"],
+    "sensor": ["sensor", "inaccurate"],
 }
 
-LOCATIONS = {
-    "London","Berlin","Paris","Warsaw","Amsterdam","Seattle","New York",
-    "Darmstadt","Geneva","Mars","Europe","India","Japan","South Korea",
-    "ExCeL London",
+POS_WORDS = {
+    "excellent", "great", "amazing", "easy", "smooth", "premium",
+    "perfect", "low", "satisfied", "bright", "decent", "works well",
+}
+NEG_WORDS = {
+    "drains", "hot", "freezes", "disconnects", "loud", "crackling",
+    "stopped", "strange", "broke", "poor", "confusing", "dropping",
+    "expensive", "inaccurate", "muffled", "issue",
 }
 
-MISC = {
-    "European Tech Summit","artificial intelligence","AI",
-}
 
-# ─────────────────────────────────────────────
-# 3. ENTITY RECOGNITION ENGINE
-# ─────────────────────────────────────────────
-def build_pattern(entity_set):
-    """Build a regex that matches any entity from the set (longest first)."""
-    sorted_ents = sorted(entity_set, key=len, reverse=True)
-    escaped = [re.escape(e) for e in sorted_ents]
-    return re.compile(r'\b(' + '|'.join(escaped) + r')\b')
+def normalize(text: str) -> str:
+    return re.sub(r"\\s+", " ", text.lower()).strip()
 
-pat_person = build_pattern(PERSONS)
-pat_org    = build_pattern(ORGANIZATIONS)
-pat_loc    = build_pattern(LOCATIONS)
-pat_date   = re.compile(
-    r'\b(\d{1,2}(?:st|nd|rd|th)?[\s\-]\w+[\s\-]\d{4}|\w+day|Monday|Tuesday|'
-    r'Wednesday|Thursday|Friday|Saturday|Sunday|January|February|March|April|'
-    r'May|June|July|August|September|October|November|December'
-    r'(?:\s+\d{1,2})?(?:,\s+\d{4})?|\d{4})\b'
-)
-pat_money  = re.compile(r'\$[\d,.]+\s*(?:billion|million|thousand|k|m|b)?', re.I)
-pat_pct    = re.compile(r'\d+[\.,]?\d*\s*%')
 
-def find_entities(text: str):
-    """Returns dict: label → list of (match_text, start, end)."""
-    found = defaultdict(list)
-
-    # Track occupied spans to avoid overlaps
-    occupied = set()
-
-    def add(label, m):
-        span = set(range(m.start(), m.end()))
-        if not span & occupied:
-            occupied.update(span)
-            found[label].append((m.group(), m.start(), m.end()))
-
-    for m in pat_person.finditer(text): add("PERSON", m)
-    for m in pat_org.finditer(text):    add("ORG",    m)
-    for m in pat_loc.finditer(text):    add("LOC",    m)
-    for m in pat_money.finditer(text):  add("MONEY",  m)
-    for m in pat_date.finditer(text):   add("DATE",   m)
-
+def extract_products(text: str) -> list[str]:
+    norm = normalize(text)
+    found = []
+    for product in PRODUCTS:
+        if product in norm:
+            found.append(product)
     return found
 
-entities = find_entities(ARTICLE)
 
-# ─────────────────────────────────────────────
-# 4. PRINT RESULTS
-# ─────────────────────────────────────────────
-LABEL_COLORS = {
-    "PERSON": "#e74c3c",
-    "ORG":    "#3498db",
-    "LOC":    "#2ecc71",
-    "MONEY":  "#f39c12",
-    "DATE":   "#9b59b6",
-}
+def extract_issues(text: str) -> list[str]:
+    norm = normalize(text)
+    found = []
+    for issue, keywords in ISSUE_PATTERNS.items():
+        if any(word in norm for word in keywords):
+            found.append(issue)
+    return found
 
-print("=" * 65)
-print("NAMED ENTITY RECOGNITION RESULTS")
-print("=" * 65)
-for label, ents in sorted(entities.items()):
-    unique_ents = sorted(set(e[0] for e in ents))
-    print(f"\n[{label}]  ({len(unique_ents)} unique)")
-    for ue in unique_ents:
-        count = sum(1 for e in ents if e[0] == ue)
-        print(f"   • {ue:<40}  (×{count})")
 
-total = sum(len(v) for v in entities.values())
-print(f"\nTotal entity mentions found: {total}")
+def detect_sentiment(text: str) -> str:
+    norm = normalize(text)
+    pos_hits = sum(1 for word in POS_WORDS if word in norm)
+    neg_hits = sum(1 for word in NEG_WORDS if word in norm)
 
-# ─────────────────────────────────────────────
-# 5. VISUALISATIONS
-# ─────────────────────────────────────────────
-fig, axes = plt.subplots(1, 3, figsize=(20, 7))
-fig.suptitle("Q3 – Named Entity Recognition on News Article",
-             fontsize=15, fontweight='bold', y=1.01)
+    if pos_hits > neg_hits:
+        return "positive"
+    if neg_hits > pos_hits:
+        return "negative"
+    return "neutral"
 
-# ── (A) Entity count by type ──
-ax = axes[0]
-type_counts = {lbl: len(set(e[0] for e in ents))
-               for lbl, ents in entities.items()}
-labels_bar  = list(type_counts.keys())
-values      = list(type_counts.values())
-colors_bar  = [LABEL_COLORS.get(l, "#95a5a6") for l in labels_bar]
-bars = ax.bar(labels_bar, values, color=colors_bar,
-              edgecolor='white', linewidth=1.5)
-ax.set_title("Unique Entities by Type", fontweight='bold')
-ax.set_ylabel("Count")
-for b in bars:
-    ax.text(b.get_x()+b.get_width()/2, b.get_height()+0.05,
-            str(int(b.get_height())), ha='center', fontweight='bold')
-ax.set_ylim(0, max(values)+2)
 
-# ── (B) Top entities overall ──
-ax = axes[1]
-all_ent_counts = Counter()
-for ents in entities.values():
-    for e_text, _, _ in ents:
-        all_ent_counts[e_text] += 1
-top15 = all_ent_counts.most_common(15)
-names_t, cnts_t = zip(*top15)
-label_of = {}
-for lbl, ents in entities.items():
-    for e_text, _, _ in ents:
-        label_of[e_text] = lbl
-bar_colors_t = [LABEL_COLORS.get(label_of.get(n,""), "#95a5a6") for n in names_t]
-y_pos = range(len(names_t))
-ax.barh(list(y_pos), cnts_t, color=bar_colors_t, edgecolor='white', linewidth=0.8)
-ax.set_yticks(list(y_pos))
-ax.set_yticklabels(names_t, fontsize=9)
-ax.set_title("Top 15 Entity Mentions", fontweight='bold')
-ax.set_xlabel("Frequency")
-legend_patches = [mpatches.Patch(color=c, label=l)
-                  for l, c in LABEL_COLORS.items()]
-ax.legend(handles=legend_patches, fontsize=8, loc='lower right')
+def annotate_html(text: str, products: list[str], issues: list[str], sentiment: str) -> str:
+    rendered = text
 
-# ── (C) Annotated article text panel ──
-ax = axes[2]
-ax.set_xlim(0,1); ax.set_ylim(0,1); ax.axis('off')
-ax.set_title("Article with Highlighted Entities\n(sample)", fontweight='bold')
-
-# Build annotated text (simplified rendering)
-snippet = ARTICLE.strip()[:900]
-lines   = textwrap.wrap(snippet, width=48)
-y_start = 0.97
-for line in lines:
-    ax.text(0.02, y_start, line, va='top', fontsize=6.5,
-            fontfamily='monospace',
-            transform=ax.transAxes)
-    y_start -= 0.047
-
-# Overlay legend
-legend_y = 0.12
-for lbl, color in LABEL_COLORS.items():
-    p = mpatches.FancyBboxPatch((0.02, legend_y-0.015), 0.12, 0.028,
-                                boxstyle="round,pad=0.01",
-                                facecolor=color, alpha=0.8,
-                                transform=ax.transAxes, clip_on=False)
-    ax.add_patch(p)
-    ax.text(0.16, legend_y, lbl, va='center', fontsize=7,
-            transform=ax.transAxes)
-    legend_y -= 0.045
-
-plt.tight_layout()
-plt.savefig("/home/prayash/Music/nlp_projects/Q3_named_entity_recognition/results.png",
-            dpi=140, bbox_inches='tight')
-print("\nChart saved → results.png")
-
-# ─────────────────────────────────────────────
-# 6. SAVE HTML ANNOTATED OUTPUT
-# ─────────────────────────────────────────────
-HTML_COLORS = {
-    "PERSON": ("#f8d7da","#c0392b"),
-    "ORG":    ("#d0e8fb","#2980b9"),
-    "LOC":    ("#d5f5e3","#1e8449"),
-    "MONEY":  ("#fef9e7","#d35400"),
-    "DATE":   ("#f3e5f5","#7d3c98"),
-}
-
-def annotate_html(text, entities_dict):
-    # Build list of (start, end, label, text)
-    spans = []
-    for label, ents in entities_dict.items():
-        for e_text, start, end in ents:
-            spans.append((start, end, label, e_text))
-    spans.sort(key=lambda x: x[0])
-
-    result = []
-    prev = 0
-    for start, end, label, e_text in spans:
-        if start < prev: continue
-        result.append(text[prev:start])
-        bg, fg = HTML_COLORS.get(label, ("#eee","#333"))
-        result.append(
-            f'<mark style="background:{bg};color:{fg};border-radius:4px;'
-            f'padding:1px 4px;margin:1px;font-weight:600" title="{label}">'
-            f'{e_text} <sup style="font-size:0.65em">{label}</sup></mark>'
+    for p in sorted(products, key=len, reverse=True):
+        rendered = re.sub(
+            re.escape(p),
+            f'<mark class="product">{p} <sup>PRODUCT</sup></mark>',
+            rendered,
+            flags=re.IGNORECASE,
         )
-        prev = end
-    result.append(text[prev:])
-    return "".join(result)
 
-html_body = annotate_html(ARTICLE, entities)
-html = f"""<!DOCTYPE html>
-<html lang="en">
+    for issue in issues:
+        rendered = re.sub(
+            issue,
+            f'<mark class="issue">{issue} <sup>ISSUE</sup></mark>',
+            rendered,
+            flags=re.IGNORECASE,
+        )
+
+    return f'<div class="card"><p>{rendered}</p><p><strong>Sentiment:</strong> {sentiment}</p></div>'
+
+
+def main() -> None:
+    rows = []
+    product_counter = Counter()
+    issue_counter = Counter()
+    sentiment_counter = Counter()
+
+    print("=" * 70)
+    print("Q3 - CUSTOMER FEEDBACK ANALYSIS")
+    print("=" * 70)
+
+    for idx, text in enumerate(FEEDBACKS, start=1):
+        products = extract_products(text)
+        issues = extract_issues(text)
+        sentiment = detect_sentiment(text)
+
+        product_counter.update(products)
+        issue_counter.update(issues)
+        sentiment_counter.update([sentiment])
+
+        rows.append((idx, text, products, issues, sentiment))
+
+        print(f"\\n[{idx}] {text}")
+        print(f"  Products : {products if products else ['none']}")
+        print(f"  Issues   : {issues if issues else ['none']}")
+        print(f"  Sentiment: {sentiment}")
+
+    print("\\n" + "-" * 70)
+    print("Summary")
+    print("-" * 70)
+    print(f"Total feedback entries: {len(FEEDBACKS)}")
+    print(f"Products detected    : {sum(product_counter.values())}")
+    print(f"Issue mentions       : {sum(issue_counter.values())}")
+    print(f"Sentiment split      : {dict(sentiment_counter)}")
+
+    fig, axes = plt.subplots(1, 3, figsize=(16, 5))
+
+    top_products = product_counter.most_common(6)
+    axes[0].bar(
+        [p for p, _ in top_products],
+        [c for _, c in top_products],
+        color="#4c78a8",
+        edgecolor="white",
+    )
+    axes[0].set_title("Top Products Mentioned")
+    axes[0].tick_params(axis="x", rotation=35)
+
+    top_issues = issue_counter.most_common(6)
+    axes[1].bar(
+        [i for i, _ in top_issues],
+        [c for _, c in top_issues],
+        color="#f58518",
+        edgecolor="white",
+    )
+    axes[1].set_title("Top Issue Categories")
+    axes[1].tick_params(axis="x", rotation=35)
+
+    sentiment_order = ["positive", "neutral", "negative"]
+    axes[2].bar(
+        sentiment_order,
+        [sentiment_counter.get(s, 0) for s in sentiment_order],
+        color=["#54a24b", "#9d9d9d", "#e45756"],
+        edgecolor="white",
+    )
+    axes[2].set_title("Sentiment Distribution")
+
+    plt.tight_layout()
+    results_path = os.path.join(os.path.dirname(__file__), "results.png")
+    plt.savefig(results_path, dpi=140, bbox_inches="tight")
+    print(f"Saved: {results_path}")
+
+    html_cards = []
+    for _, text, products, issues, sentiment in rows:
+        html_cards.append(annotate_html(text, products, issues, sentiment))
+
+    html_report = f"""<!DOCTYPE html>
+<html lang=\"en\">
 <head>
-  <meta charset="UTF-8">
-  <title>NER – Annotated Article</title>
+  <meta charset=\"UTF-8\" />
+  <title>Customer Feedback Analysis Report</title>
   <style>
-    body {{font-family: Georgia, serif; max-width: 860px; margin:40px auto;
-           line-height:1.9; font-size:1.05em; background:#fafafa; color:#222; padding:0 20px;}}
-    h1   {{color:#2c3e50;}}
-    .legend {{display:flex; gap:18px; flex-wrap:wrap; margin:18px 0; font-family:sans-serif;}}
-    .badge {{padding:4px 12px; border-radius:20px; font-weight:700; font-size:.85em;}}
+    body {{ font-family: Arial, sans-serif; max-width: 900px; margin: 30px auto; padding: 0 14px; background: #f9fafb; color: #222; }}
+    h1 {{ margin-bottom: 0; }}
+    .meta {{ color: #555; margin-top: 6px; }}
+    .card {{ background: white; border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px; margin: 12px 0; }}
+    mark.product {{ background: #dbeafe; padding: 2px 5px; border-radius: 5px; }}
+    mark.issue {{ background: #fee2e2; padding: 2px 5px; border-radius: 5px; }}
+    sup {{ font-size: 0.65em; color: #444; }}
   </style>
 </head>
 <body>
-<h1>Named Entity Recognition – Annotated News Article</h1>
-<div class="legend">
-  <span class="badge" style="background:#f8d7da;color:#c0392b">PERSON</span>
-  <span class="badge" style="background:#d0e8fb;color:#2980b9">ORG</span>
-  <span class="badge" style="background:#d5f5e3;color:#1e8449">LOC</span>
-  <span class="badge" style="background:#fef9e7;color:#d35400">MONEY</span>
-  <span class="badge" style="background:#f3e5f5;color:#7d3c98">DATE</span>
-</div>
-<p style="white-space:pre-line">{html_body}</p>
+  <h1>Customer Feedback Analysis</h1>
+  <p class=\"meta\">Topic 13 alignment: extracting products/issues and summarizing feedback patterns.</p>
+  {''.join(html_cards)}
 </body>
-</html>"""
+</html>
+"""
 
-with open("annotated_article.html","w") as f:
-    f.write(html)
-print("HTML saved → annotated_article.html")
+    html_path = os.path.join(os.path.dirname(__file__), "annotated_article.html")
+    with open(html_path, "w", encoding="utf-8") as f:
+        f.write(html_report)
+    print(f"Saved: {html_path}")
 
-# ─────────────────────────────────────────────
-# 7. SUMMARY
-# ─────────────────────────────────────────────
-print(f"""
-{'='*65}
-NER SUMMARY
-{'='*65}
-Method  : Gazetteer (curated entity lists) + Regex patterns
-Article : Tech / AI investment news (~350 words)
 
-Entity counts:
-  PERSON  : {len(set(e[0] for e in entities.get('PERSON',[]))) } unique  (e.g. Sundar Pichai, Elon Musk)
-  ORG     : {len(set(e[0] for e in entities.get('ORG',   []))) } unique  (e.g. Google, NASA, WHO)
-  LOC     : {len(set(e[0] for e in entities.get('LOC',   []))) } unique  (e.g. London, New York, Mars)
-  MONEY   : {len(set(e[0] for e in entities.get('MONEY', []))) } unique  (e.g. $1 billion)
-  DATE    : {len(set(e[0] for e in entities.get('DATE',  []))) } unique  (e.g. Tuesday, Monday, 2026)
-
-Files:  results.png  |  annotated_article.html
-""")
+if __name__ == "__main__":
+    main()
