@@ -17,32 +17,160 @@ import sys
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
-TRAINING_SAMPLES = [
-    ("i am very happy today", "joy"),
-    ("this is amazing and exciting", "joy"),
-    ("i feel great and thankful", "joy"),
-    ("today is wonderful", "joy"),
-    ("i am feeling sad and lonely", "sadness"),
-    ("i want to cry", "sadness"),
-    ("i feel down and empty", "sadness"),
-    ("nothing feels good today", "sadness"),
-    ("i am angry right now", "anger"),
-    ("this made me furious", "anger"),
-    ("i hate this situation", "anger"),
-    ("i am frustrated and annoyed", "anger"),
-    ("i am scared and worried", "fear"),
-    ("i feel nervous about tomorrow", "fear"),
-    ("this is making me panic", "fear"),
-    ("i am afraid of failing", "fear"),
-    ("work pressure is too much", "stress"),
-    ("i feel overwhelmed and exhausted", "stress"),
-    ("i cannot focus because of stress", "stress"),
-    ("i am mentally tired", "stress"),
-    ("i am okay", "neutral"),
-    ("just a normal day", "neutral"),
-    ("nothing special to report", "neutral"),
-    ("i am fine", "neutral"),
-]
+from sklearn.svm import SVC
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.naive_bayes import MultinomialNB
+
+
+def _generate_large_training_set():
+    """Generate 500+ training samples with variations and negations."""
+    samples = []
+    
+    # JOY samples (125+)
+    joy_base = [
+        "happy", "joyful", "excited", "thrilled", "delighted", "wonderful",
+        "amazing", "fantastic", "great", "excellent", "perfect", "blessed",
+        "cheerful", "elated", "over the moon", "on cloud nine", "feeling good",
+        "having fun", "laughing", "smiling", "love it", "awesome", "brilliant"
+    ]
+    joy_contexts = [
+        "i am", "i feel", "i am feeling", "im", "i have been", "today i am",
+        "right now i am", "just now i felt", "i am so", "im very", "im really"
+    ]
+    for base in joy_base:
+        for context in joy_contexts[:3]:
+            samples.append((f"{context} {base}", "joy"))
+            samples.append((f"{context} {base} today", "joy"))
+            samples.append((f"{context} {base} about everything", "joy"))
+    for base in joy_base[:10]:
+        samples.append((f"things are {base}", "joy"))
+        samples.append((f"this is {base}", "joy"))
+        samples.append((f"that was {base}", "joy"))
+    
+    # SADNESS samples (125+)
+    sadness_base = [
+        "sad", "unhappy", "miserable", "lonely", "depressed", "down",
+        "upset", "heartbroken", "devastated", "hopeless", "empty", "lost",
+        "crying", "weeping", "hurting", "suffering", "grieving", "blue",
+        "melancholy", "gloomy", "heavy hearted", "sorrowful", "dejected"
+    ]
+    for base in sadness_base:
+        for context in joy_contexts[:3]:
+            samples.append((f"{context} {base}", "sadness"))
+            samples.append((f"{context} {base} today", "sadness"))
+            samples.append((f"{context} {base} lately", "sadness"))
+    for base in sadness_base[:10]:
+        samples.append((f"everything feels {base}", "sadness"))
+        samples.append((f"i want to {base}", "sadness"))
+        samples.append((f"life is so {base}", "sadness"))
+    
+    # ANGER samples (125+)
+    anger_base = [
+        "angry", "furious", "mad", "enraged", "livid", "irritated",
+        "annoyed", "frustrated", "upset", "agitated", "hostile", "ticked off",
+        "hate", "despise", "detest", "fed up", "sick of this", "over it",
+        "outraged", "insulted", "offended", "infuriated", "seething"
+    ]
+    for base in anger_base:
+        for context in joy_contexts[:3]:
+            samples.append((f"{context} {base}", "anger"))
+            samples.append((f"{context} {base} right now", "anger"))
+            samples.append((f"{context} {base} with this", "anger"))
+    for base in anger_base[:10]:
+        samples.append((f"i {base} this", "anger"))
+        samples.append((f"this makes me {base}", "anger"))
+        samples.append((f"im so {base} about it", "anger"))
+    
+    # FEAR samples (125+)
+    fear_base = [
+        "afraid", "scared", "terrified", "frightened", "nervous", "anxious",
+        "worried", "panic", "panicking", "petrified", "horrified", "dreadful",
+        "uneasy", "apprehensive", "concerned", "stressed out", "intimidated",
+        "threatened", "alarmed", "anxious", "insecure", "vulnerable"
+    ]
+    for base in fear_base:
+        for context in joy_contexts[:3]:
+            samples.append((f"{context} {base}", "fear"))
+            samples.append((f"{context} {base} about this", "fear"))
+            samples.append((f"{context} {base} right now", "fear"))
+    for base in fear_base[:10]:
+        samples.append((f"i am {base} of this", "fear"))
+        samples.append((f"this makes me {base}", "fear"))
+        samples.append((f"im {base} about tomorrow", "fear"))
+    
+    # STRESS samples (125+)
+    stress_base = [
+        "stressed", "overwhelmed", "exhausted", "burned out", "pressure",
+        "tension", "anxiety", "overloaded", "swamped", "drowning", "rushed",
+        "frazzled", "tense", "worn out", "fatigued", "drained", "tired",
+        "overwhelm", "deadline", "deadlines", "workload", "chaos"
+    ]
+    for base in stress_base:
+        for context in joy_contexts[:3]:
+            samples.append((f"{context} {base}", "stress"))
+            samples.append((f"{context} {base} today", "stress"))
+            samples.append((f"{context} {base} with work", "stress"))
+    for base in stress_base[:10]:
+        samples.append((f"i feel {base}", "stress"))
+        samples.append((f"everything is {base}", "stress"))
+        samples.append((f"work is {base}", "stress"))
+    
+    # NEUTRAL samples (75+)
+    neutral_base = [
+        "okay", "fine", "alright", "decent", "normal", "regular",
+        "average", "middle", "fair", "pleasant", "nice", "good",
+        "manageable", "sustainable", "moderate", "reasonable"
+    ]
+    neutral_contexts = [
+        "i am", "i feel", "things are", "today is", "life is", "im",
+        "everything is", "it is", "im doing", "i am doing", "being"
+    ]
+    for base in neutral_base:
+        for context in neutral_contexts[:4]:
+            samples.append((f"{context} {base}", "neutral"))
+            samples.append((f"{context} {base} today", "neutral"))
+    
+    # Negation samples - flip opposites
+    negations = ["not", "no", "dont", "isnt", "arent", "didnt", "wont", "cant"]
+    
+    # Not happy = sadness instead
+    for neg in negations:
+        samples.append((f"i am {neg} happy", "sadness"))
+        samples.append((f"im {neg} happy", "sadness"))
+        samples.append((f"i {neg} feel happy", "sadness"))
+        samples.append((f"i am {neg} excited", "sadness"))
+        samples.append((f"im {neg} thrilled", "sadness"))
+    
+    # Not sad = joy instead
+    for neg in negations:
+        samples.append((f"i am {neg} sad", "joy"))
+        samples.append((f"im {neg} sad", "joy"))
+        samples.append((f"i {neg} feel sad", "joy"))
+        samples.append((f"i am {neg} depressed", "joy"))
+        samples.append((f"im {neg} miserable", "joy"))
+    
+    # Not angry = calm/neutral
+    for neg in negations:
+        samples.append((f"i am {neg} angry", "neutral"))
+        samples.append((f"im {neg} angry", "neutral"))
+        samples.append((f"i {neg} feel angry", "neutral"))
+    
+    # Not afraid = joy instead
+    for neg in negations:
+        samples.append((f"i am {neg} afraid", "joy"))
+        samples.append((f"im {neg} afraid", "joy"))
+        samples.append((f"im {neg} scared", "joy"))
+    
+    # Not stressed = joy
+    for neg in negations:
+        samples.append((f"i am {neg} stressed", "joy"))
+        samples.append((f"im {neg} stressed", "joy"))
+        samples.append((f"im {neg} overwhelmed", "joy"))
+    
+    return samples
+
+
+TRAINING_SAMPLES = _generate_large_training_set()
 
 EMOTION_RESPONSES = {
     "joy": [
@@ -102,6 +230,26 @@ class EmotionResponseBot:
         tokens = [tok for tok in text.split() if tok not in STOPWORDS]
         return " ".join(tokens) if tokens else text.lower().strip()
 
+    @staticmethod
+    def _detect_negation(message: str) -> bool:
+        """Detect if message contains negation words."""
+        negation_pattern = r"\b(not|no|dont|don't|isnt|isn't|arent|aren't|didnt|didn't|wont|won't|cant|can't|never|neither)\b"
+        low = message.lower()
+        return bool(re.search(negation_pattern, low))
+
+    @staticmethod
+    def _flip_emotion(emotion: str) -> str:
+        """Flip emotion based on negation context."""
+        flip_map = {
+            "joy": "sadness",
+            "sadness": "joy",
+            "anger": "neutral",
+            "fear": "joy",
+            "stress": "joy",
+            "neutral": "neutral",
+        }
+        return flip_map.get(emotion, emotion)
+
     def _fit_model(self) -> None:
         texts = [self._clean(text) for text, _ in TRAINING_SAMPLES]
         labels = np.array([label for _, label in TRAINING_SAMPLES])
@@ -157,11 +305,19 @@ class EmotionResponseBot:
                 "reply": "Take care. I am here whenever you want to talk again.",
             }
 
+        has_negation = self._detect_negation(message)
+        
         keyword_result = self._keyword_emotion(message)
         if keyword_result is not None:
             emotion, confidence = keyword_result
+            # Apply negation flipping for keyword-based detection
+            if has_negation:
+                emotion = self._flip_emotion(emotion)
         else:
             emotion, confidence = self.predict_emotion(message)
+            # ML model already trained on negations, but apply additional confidence adjustment
+            if has_negation:
+                confidence *= 0.9  # Slightly reduce confidence for negations
 
         if confidence < self.CONFIDENCE_THRESHOLD:
             return {
